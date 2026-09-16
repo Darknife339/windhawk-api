@@ -1,0 +1,276 @@
+Metadata-Version: 2.4
+Name: windhawk-api
+Version: 0.1.1
+Summary: Python client and search engine for the Windhawk mod repository (mods.windhawk.net)
+Author: Darknife
+License: MIT
+Project-URL: Repository, https://github.com/Darknife339/windhawk-api
+Keywords: windhawk,mods,repository,catalog,search,windows
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Typing :: Typed
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: mypy>=1.0; extra == "dev"
+Requires-Dist: ruff>=0.4; extra == "dev"
+
+# windhawk-api
+
+Typed Python client for the [Windhawk](https://windhawk.net/) mod repository
+([mods.windhawk.net](https://mods.windhawk.net)) — catalog, full-text search,
+mod sources, version history, and a CLI. Standard library only.
+
+```bash
+pip install windhawk-api
+```
+
+## Quick start
+
+```python
+from windhawk import Client
+
+with Client() as client:
+    # Top mods by install count
+    for mod in client.top_mods(5):
+        print(f"{mod.id:<40} {mod.users:>8} users  {mod.rating:.1f}★")
+
+    # Full-text search (built locally over the catalog)
+    hits = client.search("taskbar clock")
+    for hit in hits[:3]:
+        print(hit.mod.id, round(hit.score, 2), hit.snippet)
+
+    # Mod details: catalog entry + README + settings + versions
+    detail = client.get_mod_detail("aero-tray")
+    print(detail.name, detail.author, detail.readme[:200])
+
+    # Raw C++ source of a mod
+    source = client.get_mod_source("aero-tray")
+    print(len(source), "bytes", source.url)
+```
+
+Async variant mirrors the same API:
+
+```python
+from windhawk import AsyncClient
+
+async with AsyncClient() as client:
+    catalog = await client.get_catalog()
+    results = await client.search("start menu")
+```
+
+One-shot helpers are available for scripts that do not need a long-lived
+client: `windhawk.search_mods("tray")`, `windhawk.fetch_readme("aero-tray")`.
+
+## CLI
+
+```bash
+python -m windhawk search "taskbar clock" --limit 10
+python -m windhawk info windows-11-taskbar-styler --readme
+python -m windhawk info aero-tray --settings
+python -m windhawk catalog --sort rating --limit 10 --process explorer
+python -m windhawk versions aero-tray
+python -m windhawk cache stats
+```
+
+Every command accepts `--json` for machine readable output, `--language` for a
+localized catalog, and `--no-cache` to bypass cached responses.
+
+## Features
+
+### Catalog & Mod Browsing
+
+* `get_catalog()` — fetch and parse the mod repository metadata
+* `list_mods()` — list mods with filtering by process, author, architecture, popularity, rating
+* `get_mod(id)` — fetch single mod metadata
+* `top_mods(limit)` — ranked by user count (popularity)
+
+### Source Code & Details
+
+* `get_mod_source(id, version)` — download the ``.wh.cpp`` C++ source file
+* `get_mod_detail(id)` — all-in-one: metadata + parsed source + settings + version history
+* `parse_source(id)` — extract structured data (readme, settings, metadata) from a ``.wh.cpp`` file
+
+### Full-Text Search
+
+* Local **inverted index** over the entire catalog — no remote API call
+* `search(query)` — ranked results by relevance + popularity
+* `suggest(prefix)` — autocomplete on mod names/IDs
+* `did_you_mean(query)` — spell correction suggestions
+* Filters: `process`, `author`, `architecture`, `min_users`, `min_rating`
+
+### Version History
+
+* `list_versions(id)` — fetch all published versions with timestamps
+* `latest_version(id)` — get the newest version string
+
+### Caching & Resilience
+
+* **Memory + disk cache** with configurable TTLs per payload type (catalog: 15 min, source: 1 hour, versions: 30 min)
+* **ETag revalidation** — unchanged responses cost only a 304 round trip
+* **Stale-if-error** — serves expired cached data when the network fails (configurable)
+* Cache location: `%LOCALAPPDATA%\windhawk-api\cache` (Windows), `~/.cache/windhawk-api` (Unix)
+* Override: `Client(cache_dir="/custom/path")` or `cache_dir=False` to disable
+
+### Async Support
+
+* `AsyncClient` wraps the blocking `Client` on an executor
+* Same API surface, awaitable methods for every operation
+
+## Repository Mapping
+
+The repository is a static CDN; the client adds smart caching and convenience:
+
+| Repository Endpoint               | Client Method                             | Notes                                |
+| --------------------------------- | ----------------------------------------- | ------------------------------------ |
+| `GET /catalogs/{lang}.json`       | `get_catalog(language)`                   | Falls back to `/catalog.json` on 404 |
+| `GET /mods/{id}.wh.cpp`           | `get_mod_source(id)`                      | Falls back to GitHub mirror on 404   |
+| `GET /mods/{id}/{version}.wh.cpp` | `get_mod_source(id, version=...)`         | Specific version download            |
+| `GET /mods/{id}/versions.json`    | `list_versions(id)`                       | Version history with timestamps      |
+| *(no endpoint)*                   | `search()`, `suggest()`, `did_you_mean()` | Local inverted index (no network)    |
+
+## Data Types
+
+### Core Models
+
+* `Mod` — single catalog entry with metadata, ratings (0–5 stars), user counts, timestamps
+* `Catalog` — collection of mods with filtering/sorting helpers
+* `ModDetail` — mod + parsed C++ source + README + settings + version history
+* `ModSource` — raw ``.wh.cpp`` file with cache metadata
+* `ModMetadata` — author-supplied fields (@name, @author, @version, @include, @exclude, @architecture, etc.)
+* `SearchResult` — ranked hit with score, matched fields, and snippet
+* `VersionInfo` — version string + publish timestamp + `is_current` flag
+
+### Search & Filters
+
+* `ModIndex` — inverted index over catalog (built lazily, thread-safe)
+* `SearchFilters` — post-scoring constraints (process, author, architecture, min_users, min_rating)
+* `tokenize()` — convert text into index terms (lowercases, splits hyphenated IDs, filters noise)
+
+## Quirks & Normalization
+
+### Ratings
+
+* Catalog `details.rating` is an integer on a **0–10** scale
+* Library derives `Mod.rating` in **0–5 stars** from `ratingBreakdown` (counts of 1★…5★)
+* Raw server value stays available as `Mod.rating_score`
+
+### Timestamps
+
+* Catalog timestamps (`published`, `updated`) are epoch **milliseconds**
+* `versions.json` timestamps are epoch **seconds**
+* Both are normalized to aware UTC datetimes: `published_at` / `updated_at`
+
+### Mod IDs
+
+* Normalized to lowercase kebab-case (e.g., `aero-tray`)
+* Validated before any network request (path traversal / SSRF safe)
+* Accepts variations: `Aero-Tray`, `aero-tray.wh.cpp`, `" aero-tray "`
+
+## Error Handling
+
+All errors derive from `windhawk.WindhawkError`:
+
+```python
+from windhawk import (
+    Client, ModNotFoundError, VersionNotFoundError,
+    ValidationError, CatalogNotFoundError, ParseError,
+    RateLimitError, WindhawkConnectionError
+)
+
+try:
+    client.get_mod("../etc/passwd")         # -> ValidationError (no network call)
+    client.get_mod("not-a-real-mod")        # -> ModNotFoundError
+    client.get_mod_source("real", "v1.99")  # -> VersionNotFoundError
+except ValidationError:
+    print("Invalid input (caught before network request)")
+except ModNotFoundError as e:
+    print(f"Mod not in catalog: {e.mod_id}")
+except WindhawkConnectionError:
+    print("Network unavailable (cached data served if available)")
+except ParseError:
+    print("Malformed repository response")
+```
+
+Identifiers are validated (kebab-case allow-list) before URL interpolation, so
+malformed IDs from untrusted input fail fast.
+
+## Configuration
+
+### Client Options
+
+```python
+client = Client(
+    base_url="https://mods.windhawk.net",        # CDN root
+    language="en",                                 # catalog language
+    cache_dir=None,                               # auto-detect cache location
+    cache_dir=False,                              # disable persistence
+    cache_dir="/custom/path",                     # custom location
+    timeout=10.0,                                 # per-request timeout
+    stale_if_error=True,                         # serve expired cache on failure
+    fallback_to_default_catalog=True,            # retry /catalog.json on 404
+    user_agent="my-bot/1.0",                     # custom User-Agent
+    ttl={"catalog": 60, "source": 3600},         # override cache lifetimes (seconds)
+)
+```
+
+### Cache Lifetimes (seconds)
+
+* `catalog`: 900 (15 min) — manual edits are rare
+* `source`: 3600 (1 hour) — ``.wh.cpp`` files update infrequently
+* `versions`: 1800 (30 min) — version history changes rarely
+
+## Development
+
+```bash
+pip install -e .[dev]
+pytest                          # run tests
+ruff check src tests            # lint
+mypy src                        # type check
+python tests/smoke_offline.py   # offline sanity check (no network)
+```
+
+### Project Structure
+
+```
+src/windhawk/
+├── __init__.py          # public API (Client, AsyncClient, models, exceptions)
+├── client.py            # high-level Client and AsyncClient classes
+├── models.py            # Mod, Catalog, ModMetadata, VersionInfo, SearchResult
+├── search.py            # ModIndex (inverted index, tokenization, ranking)
+├── parser.py            # .wh.cpp parsing (README, settings, metadata extraction)
+├── cache.py             # ResponseCache (ETag, disk persistence, TTL)
+├── transport.py         # HttpTransport (urllib, connection pooling)
+├── urls.py              # URL builders and validation
+├── validation.py        # Mod ID / version / language validators
+├── exceptions.py        # Error hierarchy
+├── errors.py            # Additional error types
+└── __main__.py          # CLI entry point
+```
+
+### Typing
+
+* Fully typed with `strict: true` in mypy config
+* All public symbols export through `__all__` in `__init__.py`
+* `py.typed` marker present for type stub distribution
+
+## Inspiration & Dependencies
+
+* **Typed**: full `mypy --strict` compliance, no untyped code
+* **Zero dependencies**: built on standard library only (urllib, json, dataclasses, re, threading)
+* **Fast**: catalog fits entirely in memory; inverted index search on 300+ mods is instant
+* **Resilient**: ETag caching, stale-if-error fallback, automatic GitHub mirror on CDN 404
+
+## License
+
+MIT

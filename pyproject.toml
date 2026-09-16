@@ -1,0 +1,67 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "windhawk-api"
+version = "0.1.1"
+description = "Python client and search engine for the Windhawk mod repository (mods.windhawk.net)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Darknife" }]
+keywords = ["windhawk", "mods", "repository", "catalog", "search", "windows"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+
+# The library is intentionally dependency-free: everything is built on the
+# standard library so it can be dropped into any project or bot without
+# pulling a transitive dependency tree.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "mypy>=1.0", "ruff>=0.4"]
+
+[project.scripts]
+windhawk = "windhawk.__main__:main"
+
+[project.urls]
+Repository = "https://github.com/Darknife339/windhawk-api"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+windhawk = ["py.typed"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "C4", "SIM", "RUF"]
+# UP006/UP035 (typing.Dict -> dict) conflict with the Python 3.9 runtime
+# target, where builtin generics in annotations rely on `from __future__`
+# being present in every file; UP007/UP045 (Optional[X] -> X | None) likewise.
+ignore = ["UP006", "UP007", "UP035", "UP045"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+files = ["src/windhawk"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
