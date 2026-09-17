@@ -348,3 +348,25 @@ def test_catalog_fallback_on_missing_language(client: Client) -> None:
 
     assert len(catalog) == 2
     assert any(call.endswith("/catalog.json") for call in client.transport.calls)
+
+
+# --------------------------------------------------------------------------- #
+# Public API surface
+# --------------------------------------------------------------------------- #
+def test_everything_exported_is_importable() -> None:
+    import windhawk
+
+    missing = [name for name in windhawk.__all__ if not hasattr(windhawk, name)]
+
+    assert missing == []
+
+
+def test_one_shot_helpers_are_exported() -> None:
+    """README advertises ``windhawk.search_mods(...)``; it must really resolve."""
+
+    import windhawk
+    from windhawk import api
+
+    for name in ("fetch_catalog", "fetch_mod", "fetch_readme", "fetch_source", "search_mods"):
+        assert name in windhawk.__all__
+        assert getattr(windhawk, name) is getattr(api, name)

@@ -43,7 +43,8 @@ async with AsyncClient() as client:
 ```
 
 One-shot helpers are available for scripts that do not need a long-lived
-client: `windhawk.search_mods("tray")`, `windhawk.fetch_readme("aero-tray")`.
+client: `windhawk.search_mods("tray")`, `windhawk.fetch_readme("aero-tray")`,
+`windhawk.fetch_catalog()`, `windhawk.fetch_mod(...)`, `windhawk.fetch_source(...)`.
 
 ## CLI
 
@@ -80,7 +81,7 @@ localized catalog, and `--no-cache` to bypass cached responses.
 * `search(query)` — ranked results by relevance + popularity
 * `suggest(prefix)` — autocomplete on mod names/IDs
 * `did_you_mean(query)` — spell correction suggestions
-* Filters: `process`, `author`, `architecture`, `min_users`, `min_rating`
+* Filters: `process`, `author`, `architecture`, `min_users`, `min_rating`, `exclude_ids`
 
 ### Version History
 
@@ -93,12 +94,17 @@ localized catalog, and `--no-cache` to bypass cached responses.
 * **ETag revalidation** — unchanged responses cost only a 304 round trip
 * **Stale-if-error** — serves expired cached data when the network fails (configurable)
 * Cache location: `%LOCALAPPDATA%\windhawk-api\cache` (Windows), `~/.cache/windhawk-api` (Unix)
-* Override: `Client(cache_dir="/custom/path")` or `cache_dir=False` to disable
+* Override the location with the `WINDHAWK_CACHE_DIR` environment variable, or `XDG_CACHE_HOME`
+* Override in code: `Client(cache_dir="/custom/path")` or `cache_dir=False` to disable
 
 ### Async Support
 
 * `AsyncClient` wraps the blocking `Client` on an executor
-* Same API surface, awaitable methods for every operation
+* Awaitable methods for the network-bound operations: `get_catalog`, `get_mod`,
+  `list_mods`, `get_mod_source`, `parse_source`, `list_versions`, `get_mod_detail`,
+  `search`, `build_index`
+* Plain attributes (`base_url`, `language`, `cache`, `transport`, ...) are proxied
+  to the underlying sync client and stay synchronous
 
 ## Repository Mapping
 
@@ -162,9 +168,9 @@ from windhawk import (
 )
 
 try:
-    client.get_mod("../etc/passwd")         # -> ValidationError (no network call)
-    client.get_mod("not-a-real-mod")        # -> ModNotFoundError
-    client.get_mod_source("real", "v1.99")  # -> VersionNotFoundError
+    client.get_mod("../etc/passwd")                # -> ValidationError (no network call)
+    client.get_mod("not-a-real-mod")               # -> ModNotFoundError
+    client.get_mod_source("aero-tray", version="1.99")  # -> VersionNotFoundError
 except ValidationError:
     print("Invalid input (caught before network request)")
 except ModNotFoundError as e:
@@ -174,6 +180,9 @@ except WindhawkConnectionError:
 except ParseError:
     print("Malformed repository response")
 ```
+
+`version` in `get_mod_source` is keyword-only, and version strings must look like
+`1.2.3` / `2.0.0-alpha.5` (anything else raises `ValidationError`).
 
 Identifiers are validated (kebab-case allow-list) before URL interpolation, so
 malformed IDs from untrusted input fail fast.
@@ -186,16 +195,18 @@ malformed IDs from untrusted input fail fast.
 client = Client(
     base_url="https://mods.windhawk.net",        # CDN root
     language="en",                                 # catalog language
-    cache_dir=None,                               # auto-detect cache location
-    cache_dir=False,                              # disable persistence
-    cache_dir="/custom/path",                     # custom location
-    timeout=10.0,                                 # per-request timeout
-    stale_if_error=True,                         # serve expired cache on failure
-    fallback_to_default_catalog=True,            # retry /catalog.json on 404
-    user_agent="my-bot/1.0",                     # custom User-Agent
-    ttl={"catalog": 60, "source": 3600},         # override cache lifetimes (seconds)
+    cache_dir=None,                                # auto-detect cache location
+    timeout=10.0,                                  # per-request timeout
+    stale_if_error=True,                           # serve expired cache on failure
+    fallback_to_default_catalog=True,              # retry /catalog.json on 404
+    user_agent="my-bot/1.0",                       # custom User-Agent
+    ttl={"catalog": 60, "source": 3600},           # override cache lifetimes (seconds)
 )
 ```
+
+All arguments are keyword-only. `cache_dir` accepts `None` (auto-detect), a path
+(`"/custom/path"`) or `False` to disable persistence; `cache=` takes a
+pre-built `ResponseCache`, `transport=` a custom transport object.
 
 ### Cache Lifetimes (seconds)
 
@@ -227,7 +238,7 @@ src/windhawk/
 ├── urls.py              # URL builders and validation
 ├── validation.py        # Mod ID / version / language validators
 ├── exceptions.py        # Error hierarchy
-├── errors.py            # Additional error types
+├── errors.py            # Backwards-compatible alias for exceptions
 └── __main__.py          # CLI entry point
 ```
 

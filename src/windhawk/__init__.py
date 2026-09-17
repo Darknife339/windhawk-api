@@ -23,6 +23,7 @@ All errors derive from :class:`~windhawk.exceptions.WindhawkError`.
 
 from __future__ import annotations
 
+from .api import fetch_catalog, fetch_mod, fetch_readme, fetch_source, search_mods
 from .cache import CacheEntry, ResponseCache, default_cache_dir
 from .client import DEFAULT_TTLS, AsyncClient, Client, ModDetail
 from .exceptions import (
@@ -77,7 +78,7 @@ from .urls import (
 )
 from .validation import sanitize_query, validate_language, validate_mod_id, validate_version
 
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 
 __all__ = [
     "DEFAULT_BASE_URL",
@@ -123,6 +124,10 @@ __all__ = [
     "catalog_url",
     "default_cache_dir",
     "extract_blocks",
+    "fetch_catalog",
+    "fetch_mod",
+    "fetch_readme",
+    "fetch_source",
     "github_source_url",
     "mod_page_url",
     "mod_source_url",
@@ -132,6 +137,7 @@ __all__ = [
     "parse_settings_block",
     "sanitize_query",
     "search_catalog",
+    "search_mods",
     "sort_mods",
     "strip_comment_markers",
     "tokenize",

@@ -88,8 +88,7 @@ class SearchFilters:
         author: case-insensitive substring match on the author field.
         architecture: keep mods supporting this architecture (``x86-64``...).
         min_users / min_rating: popularity thresholds.
-        has_readme: require a README block (only meaningful for indexed
-            sources, see :meth:`ModIndex.add_source`).
+        exclude_ids: mod ids to drop from the results (dedup helpers).
     """
 
     process: Optional[str] = None
